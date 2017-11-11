@@ -2,150 +2,6 @@
 
 local game = {}
 
-function game:getPolygons(points, lines)
-    for k, point in pairs(self.points) do
-        point.visited = false
-    end
-
-    for k, line in pairs(self.lines) do
-        -- for each side it can start from
-        line.visited = {false, false}
-    end
-
-    local unvisitedPoints = {}
-    for i = 1, #self.points do
-        table.insert(unvisitedPoints, i)
-    end
-    print("Unvisited Count: "..#unvisitedPoints)
-
-    local polygons = {}
-
-    -- assuming the graph is connected
-    local currentPointIndex = 1
-    local currentPoint = self.points[currentPointIndex]
-    local incomingAngle = 0
-    local incomingLineIndex
-    local journeyBeginPointIndex = currentPointIndex
-    local currentShapePointIndices = {}
-    -- ensure it doesn't stop mid journey
-    while #unvisitedPoints > 0 or #currentShapePointIndices > 0 do
-        print("\tUnvisited: "..#unvisitedPoints..' '..Inspect(unvisitedPoints))
-        table.insert(currentShapePointIndices, currentPointIndex)
-        print("\tCurrent poly "..Inspect(currentShapePointIndices))
-
-        --if currentPoint.visited then
-        --    error("RIIPERS")
-        --else
-        if currentPoint.visited then
-            print("Point #:"..currentPointIndex.." is ALREADY visited")
-        else
-            print("Point #:"..currentPointIndex.." is not yet visited")
-        end
-            currentPoint.visited = true
-            local place = Lume.find(unvisitedPoints, currentPointIndex)
-            if place then
-                table.remove(unvisitedPoints, place)
-            end
-
-            -- pick min angle edge that's not visited from this side
-            local minAngle = math.huge
-            local chosenLine
-            local chosenLineIndex
-            local chosenWhichPoint
-            local outgoingAngle
-            for i = 1, #currentPoint.lines do
-                local line = self.lines[currentPoint.lines[i]]
-                print("\t\tchecking line:{"..line.points[1]..', '..line.points[2].."}")
-                print("\t\tsearching for the closest line. incoming angle: "..math.deg(incomingAngle))
-                local whichPoint --= ???
-                if line.points[1] == currentPointIndex then
-                    whichPoint = 1
-                elseif line.points[2] == currentPointIndex then
-                    whichPoint = 2
-                else
-                    error("what no point found :C")
-                end
-
-
-                -- don't allow the line that you just came from
-                if not line.visited[whichPoint] and currentPoint.lines[i] ~= incomingLineIndex then
-                    local angle = line.angles[whichPoint]
-                    angle = angle - (incomingAngle + math.pi)
-                    if angle < -math.pi then
-                        print("\t\t\tthe mod is "..math.deg(angle).."%180=".. math.deg(math.abs(angle))%180)
-                        print("\t\t\tok angle is at.."..math.deg(math.abs(angle)).." and is moving back by ".. math.deg(math.abs(angle))%180)
-                        angle = math.rad(180 - math.deg(math.abs(angle)) % 180)
-                        print("\t\t\tso now the angle is at "..math.deg(angle))
-                    end
-                    print("\t\tPossible min angle?: ".. math.deg(angle).. " originally: ".. math.deg(line.angles[whichPoint]))
-                    if angle < minAngle then
-                        minAngle = angle
-                        chosenLine = line
-                        chosenLineIndex = currentPoint.lines[i]
-                        chosenWhichPoint = whichPoint
-                        outgoingAngle = line.angles[whichPoint]
-                    end
-                end
-            end
-
-
-            if chosenLine then
-                print("\tminAngle.."..math.deg(minAngle).." Chosen Line:"..Inspect(chosenLine))
-
-                -- note other point is the one you came from???
-                local otherPoint = 1
-                if chosenWhichPoint == 1 then
-                    otherPoint = 2
-                end
-
-                incomingAngle = chosenLine.angles[otherPoint]
-                incomingLineIndex = chosenLineIndex
-                print("\t\tYea set that incoming angle to "..math.deg(incomingAngle).."aka:"..incomingAngle.." see the thing is: "..Inspect(chosenLine.angles))
-
-                if chosenLine.visited[chosenWhichPoint] == nil then
-                    error(chosenWhichPoint..Inspect(chosenLine)..' '..tostring(chosenLine.visited[1]))
-                end
-                chosenLine.visited[chosenWhichPoint] = true
-                -- add that line to the list of polygons
-                if not chosenLine.points[otherPoint] then error(otherPoint..' '..Inspect(chosenLine.points)) end
-                currentPointIndex = chosenLine.points[otherPoint]
-                currentPoint = self.points[currentPointIndex]
-                print("Ye next line found.. heading to point"..currentPointIndex)
-
-                if currentPoint.visited and currentPointIndex == journeyBeginPointIndex then
-                    currentPoint.visited = true
-                    print("Point #:"..currentPointIndex.." is already visited on this journey, make a polygon!")
-                    -- cycle ended, shape enclosed
-                    --add currentShapePointIndeces as a new polygon
-                    local newPolygon = {}
-                    for i = 1, #currentShapePointIndices do
-                        print("This polygon includes point: "..currentShapePointIndices[i])
-                        table.insert(newPolygon, self.points[currentShapePointIndices[i]].pos[1])
-                        table.insert(newPolygon, self.points[currentShapePointIndices[i]].pos[2])
-                    end
-                    incomingAngle = 0
-                    currentShapePointIndices = {}
-                    table.insert(polygons, newPolygon)
-                    currentPointIndex = unvisitedPoints[1]
-                    currentPoint = self.points[currentPointIndex]
-                    journeyBeginPointIndex = currentPointIndex
-                end
-            elseif #unvisitedPoints > 0 then
-                -- move on to the next unvisited point
-                currentPointIndex = unvisitedPoints[1]
-                currentPoint = self.points[currentPointIndex]
-                print("No next line found.. heading to point"..currentPointIndex)
-                error("RIP")
-                -- rip
-            end
-        --end
-    end
-
-    print("Unvisited: "..#unvisitedPoints)
-
-    return polygons
-end
-
 function game:getPolygonsWedge()
     local polygons = {}
     self.polygonColors = {} -- TODO: unite
@@ -235,26 +91,35 @@ function game:getPolygonsWedge()
 
                 table.insert(currentRegionList, nextWedge.vj)
 
+                -- I think this is ok here?
                 nextWedge.used = true
 
                 -- step 5. see if the wedge is contiguous to the starting edge of the region
                 if nextWedge.vj == currentRegionList[1] and
                    nextWedge.vk == currentRegionList[2] then
                      -- extract region and return to step 3
-                     local newPolygon = {}
+                     local newPolygon = {points={}, quickPoints={}, triangles={}, randomPoint={}, name=""}
                      print("Making a polygon!")
 
                      for i = 1, #currentRegionList-1 do
                          print("\tThis polygon includes point: "..currentRegionList[i])
-                         table.insert(newPolygon, self.points[currentRegionList[i]].pos[1])
-                         table.insert(newPolygon, self.points[currentRegionList[i]].pos[2])
+                         table.insert(newPolygon.points, currentRegionList[i])
+                         table.insert(newPolygon.quickPoints, self.points[currentRegionList[i]].pos[1])
+                         table.insert(newPolygon.quickPoints, self.points[currentRegionList[i]].pos[2])
                     end
 
-                    -- not sure if this belongs
-                    -- seems to make no difference
-                    --nextWedge.used = true
 
-                    love.math.triangulate(newPolygon)
+                    newPolygon.triangles = love.math.triangulate(newPolygon.quickPoints)
+
+                    local triangle = newPolygon.triangles[1]
+                    local p1       = Vector(triangle[1], triangle[2])
+                    local p2vector = Vector(triangle[3], triangle[4]) - p1
+                    local p3vector = Vector(triangle[5], triangle[6]) - p1
+
+                    local a1 = love.math.random() -- TODO: ensure this isn't 0 or 1
+                    local a2 = love.math.random() -- TODO: ensure this isn't 0 or 1
+
+                    newPolygon.randomPoint = {(p1 + (p2vector * a1 + p3vector * a2 * (1-a1))):unpack()}
 
                      currentRegionList = {}
                      table.insert(polygons, newPolygon)
@@ -306,7 +171,12 @@ function game:init()
     self.recentPointIndex = nil
     self.drawing = false
 
-    self.showAngleValues = true
+    self.showAngleValues = false
+    self.drawPoints = true
+    self.drawLines  = true
+
+    self.clickedRegion = nil
+    self.referenceImage = nil
 end
 
 function game:enter()
@@ -318,15 +188,59 @@ function game:update(dt)
 end
 
 function game:trimExcessPolygons()
+    print("BEFORE: "..Inspect(self.polygons))
+
     -- get triangles for each polygon
     -- determine 1 point from each polygon
+    -- polygon.randomPoint
+
+    -- for each polygon, see how many of the random points it contains
+    -- if 2 polygons contain the same point, remove the one that contains more points
+    -- if the 2 polygons contain 1 each, then remove either one
+    local foundList = {}
+    for i = 1, #self.polygons do
+        local mainPolygon = self.polygons[i]
+        local founds = {} -- contains index of the poly
+        for j = 1, #self.polygons do
+            local secondaryPolygon = self.polygons[j]
+            if i ~= j and self:isPointInPolygon(mainPolygon, secondaryPolygon.randomPoint) then
+                table.insert(founds, j)
+            end
+        end
+
+        foundList[i] = founds
+    end
+
+    print(Inspect(foundList))
+
     -- when a polygon contains point from another polygon,
     --   remove the one that contains points from more polygons
     --   if even then choose arbitrarily
 
+    -- if a polygon has a count == 1 and that point's source has count == 1, remove one arbitrarily
+    -- if any have a count >= 2, remove that polygonlocal skipList = {}
+    local skipList = {}
+    local removeList = {}
+    for i = #foundList, 1, -1 do
+        local found = foundList[i]
+        if not skipList[i] and #found == 1 and #foundList[found[1]] == 1 then
+            -- remove this guy and skip the other guy
+            table.insert(removeList, i)
+            skipList[#foundList[found[1]]] = true
+        elseif #found >= 2 then
+            table.insert(removeList, i)
+        end
+    end
+
+    for i = #removeList, 1, -1 do
+        table.remove(self.polygons, removeList[i])
+    end
+
+    --[[
     -- dumb way: remove the poly with most points
     local maxPoints = 0
     local maxPoly
+    --does this work as expected?
     for i = 1, #self.polygons do
         if #self.polygons[i] > maxPoints then
             maxPoints = #self.polygons[i]
@@ -334,24 +248,46 @@ function game:trimExcessPolygons()
         end
     end
 
-    table.remove(self.polygons, maxPoly)
-
     print(Inspect(self.polygons))
 
-    --local triangles = love.math.triangulate(polygon)
+    table.remove(self.polygons, maxPoly)
+    ]]
+
+    print("AFTER: "..Inspect(self.polygons))
 end
 
 function game:keypressed(key, code)
-    if key == "space" then
-        local startTime = love.timer.getTime()
-        self.polygons = self:getPolygonsWedge()
-        self:trimExcessPolygons()
+    if self.clickedRegion then
+        if key == "backspace" then
+            self.clickedRegion.name = self.clickedRegion.name:sub(1, -2)
+        end
+    else
+        if key == "space" then
+            self.polygons = {}
+            local startTime = love.timer.getTime()
+            self.polygons = self:getPolygonsWedge()
+            self:trimExcessPolygons()
 
-        print("Compute Time: " .. love.timer.getTime() - startTime)
+            print("Compute Time: " .. love.timer.getTime() - startTime)
+        end
+
+        if key == "a" then
+            self.showAngleValues = not self.showAngleValues
+        end
+
+        if key == "p" then
+            self.drawPoints = not self.drawPoints
+        end
+
+        if key == "l" then
+            self.drawLines = not self.drawLines
+        end
     end
+end
 
-    if key == "a" then
-        self.showAngleValues = not self.showAngleValues
+function game:textinput(text)
+    if self.clickedRegion then
+        self.clickedRegion.name = self.clickedRegion.name .. text
     end
 end
 
@@ -386,8 +322,22 @@ end
 
 function game:mousepressed(x, y, mbutton)
     if mbutton == 1 then
-        self.drawing = true
-        self.recentPointIndex = self:requestNearPoint(x, y)
+        local clickedOnRegion = false
+        for k, polygon in ipairs(self.polygons) do
+            if self:isPointInPolygon(polygon, {x,y}) then
+                clickedOnRegion = true
+                self.clickedRegion = polygon
+                break
+            end
+        end
+
+        if clickedOnRegion then
+
+        else
+            self.drawing = true
+            self.recentPointIndex = self:requestNearPoint(x, y)
+            self.clickedRegion = nil
+        end
     end
 end
 
@@ -412,35 +362,99 @@ function game:mousereleased(x, y, mbutton)
     end
 end
 
+function game:filedropped(file)
+    -- hope it is an image
+    self.referenceImage = love.graphics.newImage(file)
+end
+
 function game:drawLine(point1, point2)
     love.graphics.line(point1[1], point1[2], point2[1], point2[2])
 end
 
+function game:isPointInPolygon(polygon, point)
+    for k, triangle in ipairs(polygon.triangles) do
+        if self:isPointInTriangle(triangle, point) then
+            return true
+        end
+    end
+
+    return false
+end
+
+-- where triangle is a list {x1,y1, x2,y2, x3,y3}
+-- and   point    is a list {x, y}
+function game:isPointInTriangle(triangle, point)
+    local p0x,p0y, p1x,p1y, p2x,p2y = unpack(triangle)
+    local px,py = unpack(point)
+
+    local area = 0.5 *(-p1y*p2x + p0y*(-p1x + p2x) + p0x*(p1y - p2y) + p1x*p2y)
+
+    local s = 1/(2*area)*(p0y*p2x - p0x*p2y + (p2y - p0y)*px + (p0x - p2x)*py)
+    local t = 1/(2*area)*(p0x*p1y - p0y*p1x + (p0y - p1y)*px + (p1x - p0x)*py)
+
+    return s > 0 and t > 0 and 1-s-t > 0
+end
+
 function game:draw()
+    love.graphics.setBackgroundColor(0, 156, 255)
+    love.graphics.setFont(Fonts.bold[22])
+
+    local mx, my = love.mouse:getPosition()
+
+    -- draw polygons
     love.graphics.setColor(0, 0, 255, 255)
     for k, polygon in pairs(self.polygons) do
-        love.graphics.setColor(self.polygonColors[k])
         -- polygon must not intersect itself
-        local triangles = love.math.triangulate(polygon)
-        for k, triangle in pairs(triangles) do
+        love.graphics.setColor(self.polygonColors[k])
+        if self:isPointInPolygon(polygon, {mx,my}) then
+            love.graphics.setColor(self.polygonColors[k][1]*2,
+                                   self.polygonColors[k][2]*2,
+                                   self.polygonColors[k][3]*2)
+        end
+
+        for k2, triangle in pairs(polygon.triangles) do
             love.graphics.polygon('fill', triangle)
         end
-        --love.graphics.polygon('fill', polygon)
     end
 
     love.graphics.setColor(255, 255, 255)
 
-    for k, line in pairs(self.lines) do
-        self:drawLine(self.points[line.points[1]].pos, self.points[line.points[2]].pos)
+    -- draw lines
+    if self.drawLines then
+        for k, line in pairs(self.lines) do
+            self:drawLine(self.points[line.points[1]].pos, self.points[line.points[2]].pos)
+        end
     end
 
-    for k, point in pairs(self.points) do
-        love.graphics.circle('fill', point.pos[1], point.pos[2], self.minConnectDist * 0.5)
+    -- draw points
+    if self.drawPoints then
+        for k, point in pairs(self.points) do
+            love.graphics.circle('fill', point.pos[1], point.pos[2], self.minConnectDist * 0.5)
+        end
     end
 
     love.graphics.setColor(255, 0, 0)
-    for k, point in pairs(self.points) do
-        love.graphics.print(k, point.pos[1], point.pos[2])
+    -- draw random points
+    --for k, polygon in pairs(self.polygons) do
+    --    love.graphics.circle('line', polygon.randomPoint[1], polygon.randomPoint[2], 3)
+    --end
+
+    -- print point numbers
+    --for k, point in pairs(self.points) do
+    --    love.graphics.print(k, point.pos[1], point.pos[2])
+    --end
+
+    -- print region names
+    for k, polygon in pairs(self.polygons) do
+        local x, y = polygon.quickPoints[1], polygon.quickPoints[2]
+        for i = 3, #polygon.quickPoints, 2 do
+            x = x + polygon.quickPoints[i]
+            y = y + polygon.quickPoints[i+1]
+        end
+        local pointCount = #polygon.quickPoints/2
+        x, y = x/pointCount, y/pointCount
+        love.graphics.setColor(255, 255, 255)
+        love.graphics.print(polygon.name, x, y)
     end
 
     if self.showAngleValues then
@@ -463,8 +477,6 @@ function game:draw()
     end
     love.graphics.setColor(255, 255, 255)
 
-    local mx, my = love.mouse:getPosition()
-
     if self.drawing then
         self:drawLine(self.points[self.recentPointIndex].pos, {mx, my})
     end
@@ -473,6 +485,13 @@ function game:draw()
     if nearestIndex then
         local point = self.points[nearestIndex]
         love.graphics.circle('fill', point.pos[1], point.pos[2], self.minConnectDist)
+    end
+
+    love.graphics.setColor(255, 255, 255, 150)
+    if self.referenceImage then
+        --love.graphics.draw( drawable, x, y, r, sx, sy, ox, oy, kx, ky )
+        local w, h = self.referenceImage:getDimensions()
+        love.graphics.draw(self.referenceImage, love.graphics.getWidth()/2, love.graphics.getHeight()/2, math.pi/2, .75, .75, w/2, h/2)
     end
 end
 
