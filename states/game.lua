@@ -1,10 +1,104 @@
--- drag and drop line, make a shape
-
 local game = {}
+
+local Polygon = Class("Polygon")
+
+function Polygon:initialize(parent, pointIndices)
+    self.parent = parent
+
+    self.points = {}
+    self.quickPoints = {}
+    self.triangles = {}
+
+    self.name = ""
+
+    for i = 1, #pointIndices-1 do
+        local pointIndex = pointIndices[i]
+        print("\tThis polygon includes point: "..pointIndex)
+        table.insert(self.points, pointIndex)
+        table.insert(self.quickPoints, self.parent.points[pointIndex].pos[1])
+        table.insert(self.quickPoints, self.parent.points[pointIndex].pos[2])
+   end
+
+   self.triangles = love.math.triangulate(self.quickPoints)
+
+   self.randomPoint = self:getRandomPoint()
+
+    self.color = {
+        love.math.random(0, 255),
+        love.math.random(0, 255),
+        love.math.random(0, 255),
+    }
+
+    self.namePos = self:getAveragePosition()
+    self.nameOffset = Vector(0, 0)
+end
+
+function Polygon:refresh()
+    self.quickPoints = {}
+
+    for i = 1, #self.points do
+        local pointIndex = self.points[i]
+        table.insert(self.quickPoints, self.parent.points[pointIndex].pos[1])
+        table.insert(self.quickPoints, self.parent.points[pointIndex].pos[2])
+   end
+
+   self.triangles = love.math.triangulate(self.quickPoints)
+end
+
+function Polygon:getRandomPoint()
+    local triangle = self.triangles[1]
+    local p1       = Vector(triangle[1], triangle[2])
+    local p2vector = Vector(triangle[3], triangle[4]) - p1
+    local p3vector = Vector(triangle[5], triangle[6]) - p1
+
+    local a1 = love.math.random() -- TODO: ensure this isn't 0 or 1
+    local a2 = love.math.random() -- TODO: ensure this isn't 0 or 1
+
+    return {(p1 + (p2vector * a1 + p3vector * a2 * (1-a1))):unpack()}
+end
+
+function Polygon:getAveragePosition()
+    local x, y = self.quickPoints[1], self.quickPoints[2]
+    for i = 3, #self.quickPoints, 2 do
+        x = x + self.quickPoints[i]
+        y = y + self.quickPoints[i+1]
+    end
+    local pointCount = #self.quickPoints/2
+    x, y = x/pointCount, y/pointCount
+
+    return Vector(x, y)
+end
+
+function Polygon:moveNameOffset(delta)
+    self.nameOffset = self.nameOffset + delta
+end
+
+function Polygon:draw(mx, my)
+    -- polygon must not intersect itself
+    love.graphics.setColor(self.color)
+    if self.parent:isPointInPolygon(self, {mx,my}) then
+        love.graphics.setColor(self.color[1]*2,
+                               self.color[2]*2,
+                               self.color[3]*2)
+    end
+
+    for k2, triangle in pairs(self.triangles) do
+        love.graphics.polygon('fill', triangle)
+    end
+end
+
+function Polygon:drawName()
+    love.graphics.setColor(255, 255, 255)
+
+    local font = love.graphics.getFont()
+    local textWidth, textHeight = font:getWidth(self.name), font:getHeight()
+
+    local pos = self.namePos + self.nameOffset - 0.5*Vector(textWidth, textHeight)
+    love.graphics.print(self.name, pos.x, pos.y)
+end
 
 function game:getPolygonsWedge()
     local polygons = {}
-    self.polygonColors = {} -- TODO: unite
 
     -- duplicate edges to exist in each direction
     local directionalEdges = {}
@@ -54,11 +148,10 @@ function game:getPolygonsWedge()
         wedges[i].used = false
     end
 
-    print("Sorted wedges: "..Inspect(wedges))
+    --print("Sorted wedges: "..Inspect(wedges))
 
     local currentWedge
     local currentRegionList = {}
-    local wedgeIndex = 1
 
     while true do
         currentWedge = nil
@@ -66,7 +159,7 @@ function game:getPolygonsWedge()
         -- step 3. find the first unused wedge
         for i = 1, #wedges do
             if not wedges[i].used then
-                print("Choosing wedge #"..i)
+                --print("Choosing wedge #"..i)
                 currentWedge = wedges[i]
                 break
             end
@@ -101,67 +194,96 @@ function game:getPolygonsWedge()
                      local newPolygon = {points={}, quickPoints={}, triangles={}, randomPoint={}, name=""}
                      print("Making a polygon!")
 
-                     for i = 1, #currentRegionList-1 do
-                         print("\tThis polygon includes point: "..currentRegionList[i])
-                         table.insert(newPolygon.points, currentRegionList[i])
-                         table.insert(newPolygon.quickPoints, self.points[currentRegionList[i]].pos[1])
-                         table.insert(newPolygon.quickPoints, self.points[currentRegionList[i]].pos[2])
-                    end
-
-
-                    newPolygon.triangles = love.math.triangulate(newPolygon.quickPoints)
-
-                    local triangle = newPolygon.triangles[1]
-                    local p1       = Vector(triangle[1], triangle[2])
-                    local p2vector = Vector(triangle[3], triangle[4]) - p1
-                    local p3vector = Vector(triangle[5], triangle[6]) - p1
-
-                    local a1 = love.math.random() -- TODO: ensure this isn't 0 or 1
-                    local a2 = love.math.random() -- TODO: ensure this isn't 0 or 1
-
-                    newPolygon.randomPoint = {(p1 + (p2vector * a1 + p3vector * a2 * (1-a1))):unpack()}
+                     local newPolygon = Polygon:new(self, currentRegionList)
+                     table.insert(polygons, newPolygon)
 
                      currentRegionList = {}
-                     table.insert(polygons, newPolygon)
-                     self.polygonColors[#polygons] = {
-                         love.math.random(0, 255),
-                         love.math.random(0, 255),
-                         love.math.random(0, 255),
-                     }
-
                      returningToStep4 = false
                 else
-                    -- increment i and return to step 4
+                    -- set to the next wedge and return to step 4
                     currentWedge = nextWedge
-
                     returningToStep4 = true
                 end
             end
         else
-            print("Sorry found none")
+            print("No more wedge found")
             -- done finding polygons
+            local polygons = self:trimExcessPolygons(polygons)
             return polygons
         end
     end
 
-    error("wat don't happen here")
+    error("This should not happen.")
 end
 
 function game:getVertexWedges(edges, startI, endI)
-    print("Let's find new wedges: ["..startI..","..endI.."]")
+    --print("Let's find new wedges: ["..startI..","..endI.."]")
     local wedges = {}
     for i = startI, endI-1 do
-        print("Add wedge: ("..edges[i].vj ..","..edges[i].vi ..","..edges[i+1].vj ..")")
+        -- add a wedge
+        --print("Add wedge: ("..edges[i].vj ..","..edges[i].vi ..","..edges[i+1].vj ..")")
         table.insert(wedges, {vi=edges[i].vj, vj=edges[i].vi, vk=edges[i+1].vj})
     end
-    print("Add wedge: ("..edges[endI].vj ..","..edges[endI].vi ..","..edges[startI].vj ..")")
+    -- add wedge from end to start
+    --print("Add wedge: ("..edges[endI].vj ..","..edges[endI].vi ..","..edges[startI].vj ..")")
     table.insert(wedges, {vi=edges[endI].vj, vj=edges[endI].vi, vk=edges[startI].vj})
 
     return wedges
 end
 
+function game:trimExcessPolygons(polygons)
+    --print("BEFORE: "..Inspect(self.polygons))
+
+    -- get triangles for each polygon
+    -- determine 1 point from each polygon
+
+    -- for each polygon, see how many of the random points it contains
+    -- if 2 polygons contain the same point, remove the one that contains more points
+    -- if the 2 polygons contain 1 each, then remove either one
+    local foundList = {}
+    for i = 1, #polygons do
+        local mainPolygon = polygons[i]
+        local founds = {} -- contains index of the poly
+        for j = 1, #polygons do
+            local secondaryPolygon = polygons[j]
+            if i ~= j and self:isPointInPolygon(mainPolygon, secondaryPolygon.randomPoint) then
+                table.insert(founds, j)
+            end
+        end
+
+        foundList[i] = founds
+    end
+
+    -- when a polygon contains point from another polygon,
+    --   remove the one that contains points from more polygons
+    --   if even then choose arbitrarily
+
+    -- if a polygon has a count == 1 and that point's source has count == 1, remove one arbitrarily
+    -- if any have a count >= 2, remove that polygonlocal skipList = {}
+    local skipList = {}
+    local removeList = {}
+    for i = #foundList, 1, -1 do
+        local found = foundList[i]
+        if not skipList[i] and #found == 1 and #foundList[found[1]] == 1 then
+            -- remove this guy and skip the other guy
+            table.insert(removeList, i)
+            skipList[#foundList[found[1]]] = true
+        elseif #found >= 2 then
+            table.insert(removeList, i)
+        end
+    end
+
+    for i = #removeList, 1, -1 do
+        table.remove(polygons, removeList[i])
+    end
+
+    --print("AFTER: "..Inspect(self.polygons))
+
+    return polygons
+end
+
 function game:init()
-    self.minConnectDist = 10
+    self.maxConnectDist = 10
 
 
     self.points = {}
@@ -184,76 +306,24 @@ function game:enter()
 end
 
 function game:update(dt)
-
-end
-
-function game:trimExcessPolygons()
-    print("BEFORE: "..Inspect(self.polygons))
-
-    -- get triangles for each polygon
-    -- determine 1 point from each polygon
-    -- polygon.randomPoint
-
-    -- for each polygon, see how many of the random points it contains
-    -- if 2 polygons contain the same point, remove the one that contains more points
-    -- if the 2 polygons contain 1 each, then remove either one
-    local foundList = {}
-    for i = 1, #self.polygons do
-        local mainPolygon = self.polygons[i]
-        local founds = {} -- contains index of the poly
-        for j = 1, #self.polygons do
-            local secondaryPolygon = self.polygons[j]
-            if i ~= j and self:isPointInPolygon(mainPolygon, secondaryPolygon.randomPoint) then
-                table.insert(founds, j)
-            end
+    if self.clickedRegion then
+        local delta = Vector(0, 0)
+        if love.keyboard.isDown('w', 'up') then
+            delta.y = -1
+        end
+        if love.keyboard.isDown('s', 'down') then
+            delta.y = 1
+        end
+        if love.keyboard.isDown('a', 'left') then
+            delta.x = -1
+        end
+        if love.keyboard.isDown('d', 'right') then
+            delta.x = 1
         end
 
-        foundList[i] = founds
+        delta:normalizeInplace()
+        self.clickedRegion:moveNameOffset(delta)
     end
-
-    print(Inspect(foundList))
-
-    -- when a polygon contains point from another polygon,
-    --   remove the one that contains points from more polygons
-    --   if even then choose arbitrarily
-
-    -- if a polygon has a count == 1 and that point's source has count == 1, remove one arbitrarily
-    -- if any have a count >= 2, remove that polygonlocal skipList = {}
-    local skipList = {}
-    local removeList = {}
-    for i = #foundList, 1, -1 do
-        local found = foundList[i]
-        if not skipList[i] and #found == 1 and #foundList[found[1]] == 1 then
-            -- remove this guy and skip the other guy
-            table.insert(removeList, i)
-            skipList[#foundList[found[1]]] = true
-        elseif #found >= 2 then
-            table.insert(removeList, i)
-        end
-    end
-
-    for i = #removeList, 1, -1 do
-        table.remove(self.polygons, removeList[i])
-    end
-
-    --[[
-    -- dumb way: remove the poly with most points
-    local maxPoints = 0
-    local maxPoly
-    --does this work as expected?
-    for i = 1, #self.polygons do
-        if #self.polygons[i] > maxPoints then
-            maxPoints = #self.polygons[i]
-            maxPoly = i
-        end
-    end
-
-    print(Inspect(self.polygons))
-
-    table.remove(self.polygons, maxPoly)
-    ]]
-
-    print("AFTER: "..Inspect(self.polygons))
 end
 
 function game:keypressed(key, code)
@@ -266,8 +336,6 @@ function game:keypressed(key, code)
             self.polygons = {}
             local startTime = love.timer.getTime()
             self.polygons = self:getPolygonsWedge()
-            self:trimExcessPolygons()
-
             print("Compute Time: " .. love.timer.getTime() - startTime)
         end
 
@@ -291,12 +359,17 @@ function game:textinput(text)
     end
 end
 
+
+-- if there is a point within maxDist of (x,y),
+-- returns it and the distance
+-- otherwise returns nil
 function game:getNearPoint(x, y)
     local nearestIndex = nil
     local nearestDist = math.huge
+    local maxDist = self.maxConnectDist
     for i, point in ipairs(self.points) do
         local dist = math.sqrt((x-point.pos[1])^2 + (y-point.pos[2])^2)
-        if dist <= self.minConnectDist and (not nearestIndex or dist < nearestDist) then
+        if dist <= maxDist and (not nearestIndex or dist < nearestDist) then
             nearestIndex = i
             nearestDist = dist
         end
@@ -334,9 +407,17 @@ function game:mousepressed(x, y, mbutton)
         if clickedOnRegion then
 
         else
-            self.drawing = true
-            self.recentPointIndex = self:requestNearPoint(x, y)
+            if not self.clickedRegion then
+                self.drawing = true
+                self.recentPointIndex = self:requestNearPoint(x, y)
+            end
+
             self.clickedRegion = nil
+        end
+    elseif mbutton == 2 then
+        local grabbedPointIndex = self:getNearPoint(x, y)
+        if grabbedPointIndex then
+            self.grabbedPoint = self.points[grabbedPointIndex]
         end
     end
 end
@@ -359,6 +440,21 @@ function game:mousereleased(x, y, mbutton)
 
         table.insert(self.points[self.recentPointIndex].lines, lineIndex)
         table.insert(self.points[endPointIndex].lines, lineIndex)
+    end
+
+    if mbutton == 2 then
+        self.grabbedPoint = nil
+    end
+end
+
+function game:mousemoved(x, y, dx, dy, istouch)
+    if self.grabbedPoint then
+        self.grabbedPoint.pos[1] = self.grabbedPoint.pos[1] + dx
+        self.grabbedPoint.pos[2] = self.grabbedPoint.pos[2] + dy
+
+        for k, polygon in pairs(self.polygons) do
+            polygon:refresh()
+        end
     end
 end
 
@@ -404,17 +500,7 @@ function game:draw()
     -- draw polygons
     love.graphics.setColor(0, 0, 255, 255)
     for k, polygon in pairs(self.polygons) do
-        -- polygon must not intersect itself
-        love.graphics.setColor(self.polygonColors[k])
-        if self:isPointInPolygon(polygon, {mx,my}) then
-            love.graphics.setColor(self.polygonColors[k][1]*2,
-                                   self.polygonColors[k][2]*2,
-                                   self.polygonColors[k][3]*2)
-        end
-
-        for k2, triangle in pairs(polygon.triangles) do
-            love.graphics.polygon('fill', triangle)
-        end
+        polygon:draw(mx, my)
     end
 
     love.graphics.setColor(255, 255, 255)
@@ -429,7 +515,7 @@ function game:draw()
     -- draw points
     if self.drawPoints then
         for k, point in pairs(self.points) do
-            love.graphics.circle('fill', point.pos[1], point.pos[2], self.minConnectDist * 0.5)
+            love.graphics.circle('fill', point.pos[1], point.pos[2], self.maxConnectDist * 0.5)
         end
     end
 
@@ -446,15 +532,7 @@ function game:draw()
 
     -- print region names
     for k, polygon in pairs(self.polygons) do
-        local x, y = polygon.quickPoints[1], polygon.quickPoints[2]
-        for i = 3, #polygon.quickPoints, 2 do
-            x = x + polygon.quickPoints[i]
-            y = y + polygon.quickPoints[i+1]
-        end
-        local pointCount = #polygon.quickPoints/2
-        x, y = x/pointCount, y/pointCount
-        love.graphics.setColor(255, 255, 255)
-        love.graphics.print(polygon.name, x, y)
+        polygon:drawName()
     end
 
     if self.showAngleValues then
@@ -484,7 +562,7 @@ function game:draw()
     local nearestIndex, nearestDist = self:getNearPoint(mx, my)
     if nearestIndex then
         local point = self.points[nearestIndex]
-        love.graphics.circle('fill', point.pos[1], point.pos[2], self.minConnectDist)
+        love.graphics.circle('fill', point.pos[1], point.pos[2], self.maxConnectDist)
     end
 
     love.graphics.setColor(255, 255, 255, 150)
