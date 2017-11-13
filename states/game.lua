@@ -1,101 +1,6 @@
 local game = {}
 
-local Polygon = Class("Polygon")
-
-function Polygon:initialize(parent, pointIndices)
-    self.parent = parent
-
-    self.points = {}
-    self.quickPoints = {}
-    self.triangles = {}
-
-    self.name = ""
-
-    for i = 1, #pointIndices-1 do
-        local pointIndex = pointIndices[i]
-        print("\tThis polygon includes point: "..pointIndex)
-        table.insert(self.points, pointIndex)
-        table.insert(self.quickPoints, self.parent.points[pointIndex].pos[1])
-        table.insert(self.quickPoints, self.parent.points[pointIndex].pos[2])
-   end
-
-   self.triangles = love.math.triangulate(self.quickPoints)
-
-   self.randomPoint = self:getRandomPoint()
-
-    self.color = {
-        love.math.random(0, 255),
-        love.math.random(0, 255),
-        love.math.random(0, 255),
-    }
-
-    self.namePos = self:getAveragePosition()
-    self.nameOffset = Vector(0, 0)
-end
-
-function Polygon:refresh()
-    self.quickPoints = {}
-
-    for i = 1, #self.points do
-        local pointIndex = self.points[i]
-        table.insert(self.quickPoints, self.parent.points[pointIndex].pos[1])
-        table.insert(self.quickPoints, self.parent.points[pointIndex].pos[2])
-   end
-
-   self.triangles = love.math.triangulate(self.quickPoints)
-end
-
-function Polygon:getRandomPoint()
-    local triangle = self.triangles[1]
-    local p1       = Vector(triangle[1], triangle[2])
-    local p2vector = Vector(triangle[3], triangle[4]) - p1
-    local p3vector = Vector(triangle[5], triangle[6]) - p1
-
-    local a1 = love.math.random() -- TODO: ensure this isn't 0 or 1
-    local a2 = love.math.random() -- TODO: ensure this isn't 0 or 1
-
-    return {(p1 + (p2vector * a1 + p3vector * a2 * (1-a1))):unpack()}
-end
-
-function Polygon:getAveragePosition()
-    local x, y = self.quickPoints[1], self.quickPoints[2]
-    for i = 3, #self.quickPoints, 2 do
-        x = x + self.quickPoints[i]
-        y = y + self.quickPoints[i+1]
-    end
-    local pointCount = #self.quickPoints/2
-    x, y = x/pointCount, y/pointCount
-
-    return Vector(x, y)
-end
-
-function Polygon:moveNameOffset(delta)
-    self.nameOffset = self.nameOffset + delta
-end
-
-function Polygon:draw(mx, my)
-    -- polygon must not intersect itself
-    love.graphics.setColor(self.color)
-    if self.parent:isPointInPolygon(self, {mx,my}) then
-        love.graphics.setColor(self.color[1]*2,
-                               self.color[2]*2,
-                               self.color[3]*2)
-    end
-
-    for k2, triangle in pairs(self.triangles) do
-        love.graphics.polygon('fill', triangle)
-    end
-end
-
-function Polygon:drawName()
-    love.graphics.setColor(255, 255, 255)
-
-    local font = love.graphics.getFont()
-    local textWidth, textHeight = font:getWidth(self.name), font:getHeight()
-
-    local pos = self.namePos + self.nameOffset - 0.5*Vector(textWidth, textHeight)
-    love.graphics.print(self.name, pos.x, pos.y)
-end
+local Polygon = require 'entities.polygon'
 
 function game:getPolygonsWedge()
     local polygons = {}
@@ -195,7 +100,12 @@ function game:getPolygonsWedge()
                      print("Making a polygon!")
 
                      local newPolygon = Polygon:new(self, currentRegionList)
-                     table.insert(polygons, newPolygon)
+                     if newPolygon.destroy then
+                         newPolygon = nil
+                     else
+                         table.insert(polygons, newPolygon)
+
+                     end
 
                      currentRegionList = {}
                      returningToStep4 = false
@@ -232,7 +142,7 @@ function game:getVertexWedges(edges, startI, endI)
 end
 
 function game:trimExcessPolygons(polygons)
-    --print("BEFORE: "..Inspect(self.polygons))
+    print("BEFORE: {"..Inspect(polygons))
 
     -- get triangles for each polygon
     -- determine 1 point from each polygon
@@ -246,7 +156,7 @@ function game:trimExcessPolygons(polygons)
         local founds = {} -- contains index of the poly
         for j = 1, #polygons do
             local secondaryPolygon = polygons[j]
-            if i ~= j and self:isPointInPolygon(mainPolygon, secondaryPolygon.randomPoint) then
+            if i ~= j and mainPolygon:containsPoint(secondaryPolygon.randomPoint) then
                 table.insert(founds, j)
             end
         end
@@ -277,7 +187,7 @@ function game:trimExcessPolygons(polygons)
         table.remove(polygons, removeList[i])
     end
 
-    --print("AFTER: "..Inspect(self.polygons))
+    print("AFTER: "..Inspect(polygons))
 
     return polygons
 end
@@ -299,6 +209,10 @@ function game:init()
 
     self.clickedRegion = nil
     self.referenceImage = nil
+
+    self.overlayImage = love.graphics.newImage("assets/images/overlays/1.jpg")
+
+
 end
 
 function game:enter()
@@ -350,6 +264,112 @@ function game:keypressed(key, code)
         if key == "l" then
             self.drawLines = not self.drawLines
         end
+
+        if key == "f5" then
+            self.points = {}
+            self.lines = {}
+            self.polygons = {}
+
+            self.recentPointIndex = nil
+            self.drawing = false
+
+            self.showAngleValues = false
+            self.drawPoints = true
+            self.drawLines  = true
+
+            self.clickedRegion = nil
+        end
+
+        if key == "lshift" and self.drawing then
+            local x, y = love.mouse.getPosition()
+            --self.drawing = false
+            local endPointIndex = self:requestNearPoint(x, y)
+            if self.recentPointIndex ~= endPointIndex then
+                local line = {
+                    points = {self.recentPointIndex, endPointIndex},
+                }
+                local point1, point2 = self.points[line.points[1]].pos, self.points[line.points[2]].pos
+                line.angles = {
+                    math.atan2(point1[2]-point2[2], point2[1]-point1[1]),
+                    math.atan2(point2[2]-point1[2], point1[1]-point2[1])
+                }
+
+                local lineIndex = #self.lines+1
+                self.lines[lineIndex] = line
+
+                table.insert(self.points[self.recentPointIndex].lines, lineIndex)
+                table.insert(self.points[endPointIndex].lines, lineIndex)
+
+                self.recentPointIndex = endPointIndex
+            end
+        end
+    end
+end
+
+function game:mousepressed(x, y, mbutton)
+    if mbutton == 1 then
+        local clickedOnRegion = false
+        --[[for k, polygon in ipairs(self.polygons) do
+            if polygon:containsPoint({x,y}) then
+                clickedOnRegion = true
+                self.clickedRegion = polygon
+                break
+            end
+        end]]
+
+        if clickedOnRegion then
+
+        else
+            if not self.clickedRegion then
+                self.drawing = true
+                self.recentPointIndex = self:requestNearPoint(x, y)
+            end
+
+            self.clickedRegion = nil
+        end
+    elseif mbutton == 2 then
+        local grabbedPointIndex = self:getNearPoint(x, y)
+        if grabbedPointIndex then
+            self.grabbedPoint = self.points[grabbedPointIndex]
+        end
+    end
+end
+
+function game:mousereleased(x, y, mbutton)
+    if self.drawing and mbutton == 1 then
+        self.drawing = false
+        local endPointIndex = self:requestNearPoint(x, y)
+        if self.recentPointIndex ~= endPointIndex then
+            local line = {
+                points = {self.recentPointIndex, endPointIndex},
+            }
+            local point1, point2 = self.points[line.points[1]].pos, self.points[line.points[2]].pos
+            line.angles = {
+                math.atan2(point1[2]-point2[2], point2[1]-point1[1]),
+                math.atan2(point2[2]-point1[2], point1[1]-point2[1])
+            }
+
+            local lineIndex = #self.lines+1
+            self.lines[lineIndex] = line
+
+            table.insert(self.points[self.recentPointIndex].lines, lineIndex)
+            table.insert(self.points[endPointIndex].lines, lineIndex)
+        end
+    end
+
+    if mbutton == 2 then
+        self.grabbedPoint = nil
+    end
+end
+
+function game:mousemoved(x, y, dx, dy, istouch)
+    if self.grabbedPoint then
+        self.grabbedPoint.pos[1] = self.grabbedPoint.pos[1] + dx
+        self.grabbedPoint.pos[2] = self.grabbedPoint.pos[2] + dy
+
+        for k, polygon in pairs(self.polygons) do
+            polygon:refresh()
+        end
     end
 end
 
@@ -393,71 +413,6 @@ function game:requestNearPoint(x, y)
     end
 end
 
-function game:mousepressed(x, y, mbutton)
-    if mbutton == 1 then
-        local clickedOnRegion = false
-        for k, polygon in ipairs(self.polygons) do
-            if self:isPointInPolygon(polygon, {x,y}) then
-                clickedOnRegion = true
-                self.clickedRegion = polygon
-                break
-            end
-        end
-
-        if clickedOnRegion then
-
-        else
-            if not self.clickedRegion then
-                self.drawing = true
-                self.recentPointIndex = self:requestNearPoint(x, y)
-            end
-
-            self.clickedRegion = nil
-        end
-    elseif mbutton == 2 then
-        local grabbedPointIndex = self:getNearPoint(x, y)
-        if grabbedPointIndex then
-            self.grabbedPoint = self.points[grabbedPointIndex]
-        end
-    end
-end
-
-function game:mousereleased(x, y, mbutton)
-    if self.drawing and mbutton == 1 then
-        self.drawing = false
-        local endPointIndex = self:requestNearPoint(x, y)
-        local line = {
-            points = {self.recentPointIndex, endPointIndex},
-        }
-        local point1, point2 = self.points[line.points[1]].pos, self.points[line.points[2]].pos
-        line.angles = {
-            math.atan2(point1[2]-point2[2], point2[1]-point1[1]),
-            math.atan2(point2[2]-point1[2], point1[1]-point2[1])
-        }
-
-        local lineIndex = #self.lines+1
-        self.lines[lineIndex] = line
-
-        table.insert(self.points[self.recentPointIndex].lines, lineIndex)
-        table.insert(self.points[endPointIndex].lines, lineIndex)
-    end
-
-    if mbutton == 2 then
-        self.grabbedPoint = nil
-    end
-end
-
-function game:mousemoved(x, y, dx, dy, istouch)
-    if self.grabbedPoint then
-        self.grabbedPoint.pos[1] = self.grabbedPoint.pos[1] + dx
-        self.grabbedPoint.pos[2] = self.grabbedPoint.pos[2] + dy
-
-        for k, polygon in pairs(self.polygons) do
-            polygon:refresh()
-        end
-    end
-end
-
 function game:filedropped(file)
     -- hope it is an image
     self.referenceImage = love.graphics.newImage(file)
@@ -467,32 +422,12 @@ function game:drawLine(point1, point2)
     love.graphics.line(point1[1], point1[2], point2[1], point2[2])
 end
 
-function game:isPointInPolygon(polygon, point)
-    for k, triangle in ipairs(polygon.triangles) do
-        if self:isPointInTriangle(triangle, point) then
-            return true
-        end
-    end
-
-    return false
-end
-
--- where triangle is a list {x1,y1, x2,y2, x3,y3}
--- and   point    is a list {x, y}
-function game:isPointInTriangle(triangle, point)
-    local p0x,p0y, p1x,p1y, p2x,p2y = unpack(triangle)
-    local px,py = unpack(point)
-
-    local area = 0.5 *(-p1y*p2x + p0y*(-p1x + p2x) + p0x*(p1y - p2y) + p1x*p2y)
-
-    local s = 1/(2*area)*(p0y*p2x - p0x*p2y + (p2y - p0y)*px + (p0x - p2x)*py)
-    local t = 1/(2*area)*(p0x*p1y - p0y*p1x + (p0y - p1y)*px + (p1x - p0x)*py)
-
-    return s > 0 and t > 0 and 1-s-t > 0
-end
-
 function game:draw()
+    --love.graphics.draw(self.overlayImage)
+
     love.graphics.setBackgroundColor(0, 156, 255)
+    --love.graphics.setColor(0, 156, 255, 200)
+    --love.graphics.rectangle('fill', 0, 0, love.graphics.getWidth(), love.graphics.getHeight())
     love.graphics.setFont(Fonts.bold[22])
 
     local mx, my = love.mouse:getPosition()
@@ -526,9 +461,9 @@ function game:draw()
     --end
 
     -- print point numbers
-    --for k, point in pairs(self.points) do
-    --    love.graphics.print(k, point.pos[1], point.pos[2])
-    --end
+    for k, point in pairs(self.points) do
+        love.graphics.print(k, point.pos[1], point.pos[2])
+    end
 
     -- print region names
     for k, polygon in pairs(self.polygons) do
@@ -571,6 +506,10 @@ function game:draw()
         local w, h = self.referenceImage:getDimensions()
         love.graphics.draw(self.referenceImage, love.graphics.getWidth()/2, love.graphics.getHeight()/2, math.pi/2, .75, .75, w/2, h/2)
     end
+
+    love.graphics.setColor(255, 255, 255, 100)
+    local w, h = self.overlayImage:getDimensions()
+    love.graphics.draw(self.overlayImage, love.graphics.getWidth()/2, love.graphics.getHeight()/2, math.pi/2, 1, 1, w/2, h/2)
 end
 
 return game

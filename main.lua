@@ -1,16 +1,6 @@
 local loadTimeStart = love.timer.getTime()
 require 'globals'
 
-Lume    = require 'libs.lume'
-Husl    = require 'libs.husl'
-Class   = require 'libs.middleclass'
-Vector  = require 'libs.vector'
-State   = require 'libs.state'
-Signal  = require 'libs.signal'
-Inspect = require 'libs.inspect'
-Camera  = require 'libs.camera'
-Timer   = require 'libs.timer'
-
 if DEBUG then
     Lovebird = require 'libs.lovebird'
     Lovebird.port = CONFIG.debug.lovebird.port

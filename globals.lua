@@ -7,6 +7,18 @@ RELEASE = false
 -- Enables the debug stats
 DEBUG = not RELEASE
 
+Lume    = require 'libs.lume'
+Husl    = require 'libs.husl'
+Class   = require 'libs.middleclass'
+Vector  = require 'libs.vector'
+State   = require 'libs.state'
+Signal  = require 'libs.signal'
+Inspect = require 'libs.inspect'
+Camera  = require 'libs.camera'
+Timer   = require 'libs.timer'
+
+require 'libs.utils'
+
 CONFIG = {
     graphics = {
         filter = {
@@ -37,7 +49,7 @@ CONFIG = {
             fontSize        = 16,
             lineHeight      = 18,
             foreground      = {255, 255, 255, 225},
-            shadow          = {0, 0, 0, 225}, 
+            shadow          = {0, 0, 0, 225},
             shadowOffset    = {x = 1, y = 1},
             position        = {x = 8, y = 6},
 
@@ -50,7 +62,7 @@ CONFIG = {
             fontSize        = 16,
             background      = {26, 79, 126},
             foreground      = {255, 255, 255},
-            shadow          = {0, 0, 0, 225}, 
+            shadow          = {0, 0, 0, 225},
             shadowOffset    = {x = 1, y = 1},
             position        = {x = 70, y = 70},
         },
@@ -72,7 +84,7 @@ local function makeFont(path)
             local f = love.graphics.newFont(path, size)
             rawset(t, size, f)
             return f
-        end 
+        end
     })
 end
 
