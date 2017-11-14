@@ -94,11 +94,15 @@ end
 
 function Polygon:draw(mx, my)
     -- polygon must not intersect itself
-    love.graphics.setColor(self.color)
+    love.graphics.setColor(self.color[1],
+                           self.color[2],
+                           self.color[3],
+                           150)
     if self:containsPoint({mx,my}) then
         love.graphics.setColor(self.color[1]*2,
                                self.color[2]*2,
-                               self.color[3]*2)
+                               self.color[3]*2,
+                               150)
     end
 
     for k2, triangle in pairs(self.triangles) do
