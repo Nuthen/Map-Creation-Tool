@@ -26,9 +26,9 @@ function game:init()
 
     self.terrain = {
         parent = self,
-        width = 40,
-        height = 20,
-        spacing = 40,
+        width = 160,
+        height = 80,
+        spacing = 17.5,
         colors = {
             water = {0, 0, 255},
             land  = {0, 255, 0},
@@ -36,11 +36,12 @@ function game:init()
         init = function(self)
             self.grid = {}
             self.triangles = {}
+            self.hexagons = {}
             for ix = 1, self.width do
                 self.grid[ix] = {}
                 for iy = 1, self.height do
-                    local x, y = (ix-1) * self.spacing, (iy-1) * self.spacing
-                    self.grid[ix][iy] = self:newPoint(x, y, {water=1,land=0}, self.colors.water)
+                    --local x, y = (ix-1) * self.spacing, (iy-1) * self.spacing
+                    self.grid[ix][iy] = self:newPoint(0, 0, {water=1,land=0}, self.colors.water)
                 end
             end
         end,
@@ -56,11 +57,56 @@ function game:init()
                     table.insert(self.triangles, {p2, p4, p3})
                 end
             end
+
+            self.hexPoints = {}
+            local tol = 0.001
+            local r = self.spacing/2
+            self.hexagons = {}
+            for ix = 1, self.width-1 do
+                for iy = 1, self.height-1 do
+                    local point = self.grid[ix][iy]
+                    local delta = Vector(r, 0):rotateInplace(math.rad(30))
+
+                    local points = {}
+                    for i = 0, 300, 60 do
+                        local corner = Vector(point.x, point.y) + delta:rotated(math.rad(i))
+                        local foundPoint = nil
+                        for j = 1, #self.hexPoints do
+                            if corner.x >= self.hexPoints[j].x-tol and
+                               corner.x <= self.hexPoints[j].x+tol and
+                               corner.y >= self.hexPoints[j].y-tol and
+                               corner.y <= self.hexPoints[j].y+tol then
+                                foundPoint = j
+                                break
+                            end
+                        end
+
+                        if not foundPoint then
+                            self.hexPoints[#self.hexPoints+1] = corner
+                            foundPoint = #self.hexPoints
+                        end
+                        table.insert(points, foundPoint)
+                    end
+
+                    table.insert(self.hexagons, {source=point, points=points})
+                end
+            end
+
+            for k, point in ipairs(self.hexPoints) do
+                self.hexPoints[k] = point + Vector(love.math.random(), love.math.random()) * r * .6
+            end
+
+            --local corner = Vector(point.x, point.y) +
+            --             delta:rotated(math.rad(i + love.math.random(-5, 5))) * (love.math.random()*.8+.2)
         end,
         refresh = function(self)
             for ix = 1, #self.grid do
                 for iy = 1, #self.grid[ix] do
-                    local x, y = (ix-1) * self.spacing, (iy-1) * self.spacing
+                    local r = self.spacing/2
+                    local x, y = r * math.sqrt(3) * (ix-1), r * 3/2 * (iy-1)
+                    if iy % 2 == 1 then
+                        x = r * math.sqrt(3) * (ix-1 + 0.5)
+                    end
                     local inAny = false
                     for k, polygon in ipairs(self.parent.polygons) do
                         if polygon:containsPoint({x, y}) then
@@ -79,7 +125,7 @@ function game:init()
             self:setTriangles()
         end,
         draw = function(self)
-            love.graphics.setShader(self.parent.triangleShader)
+            --[[love.graphics.setShader(self.parent.triangleShader)
             for k, triangle in ipairs(self.triangles) do
                 local p1, p2, p3 = unpack(triangle)
 
@@ -97,29 +143,39 @@ function game:init()
                 self.parent.triangleShader:send('weight2', p2.weight)
                 self.parent.triangleShader:send('weight3', p3.weight)
 
-                love.graphics.polygon('fill', p1.x,p1.y, p2.x,p2.y, p3.x,p3.y)
+                --love.graphics.polygon('line', p1.x,p1.y, p2.x,p2.y, p3.x,p3.y)
             end
-            love.graphics.setShader()
+            love.graphics.setShader()]]
+
+            for k, hexagon in ipairs(self.hexagons) do
+                local points = {}
+                for i = 1, #hexagon.points do
+                    table.insert(points, self.hexPoints[hexagon.points[i]].x)
+                    table.insert(points, self.hexPoints[hexagon.points[i]].y)
+                end
+                love.graphics.setColor(hexagon.source.color)
+                love.graphics.polygon('fill', points)
+            end
 
             for k, triangle in ipairs(self.triangles) do
-                local p1, p2, p3 = unpack(triangle)
+                --local p1, p2, p3 = unpack(triangle)
                 --love.graphics.line(p1.x,p1.y, p2.x,p2.y, p3.x,p3.y, p1.x,p1.y)
             end
 
-            for ix = 1, #self.grid do
+            --[[for ix = 1, #self.grid do
                 for iy = 1, #self.grid[ix] do
                     local point = self.grid[ix][iy]
                     local x,y = point.x, point.y
                     love.graphics.setColor(255, 255, 255)
-                    --love.graphics.circle('fill', x, y, 7)
+                    love.graphics.circle('fill', x, y, 7)
                     if point.water == 1 then
-                        love.graphics.setColor(self.colors.water)
+                        love.graphics.setColor(0, 0, 255)
                     elseif point.land == 1 then
                         love.graphics.setColor(self.colors.land)
                     end
-                    --love.graphics.circle('fill', x, y, 6)
+                    love.graphics.circle('fill', x, y, 6)
                 end
-            end
+            end]]
         end,
     }
     self.terrain:init()
@@ -366,7 +422,7 @@ function game:draw()
     -- draw polygons
     --love.graphics.setColor(0, 0, 255, 255)
     for k, polygon in pairs(self.polygons) do
-        polygon:draw(mx, my)
+        --polygon:draw(mx, my)
     end
 
     love.graphics.setColor(255, 255, 255)
@@ -393,7 +449,7 @@ function game:draw()
 
     -- print point numbers
     for k, point in pairs(self.points) do
-        love.graphics.print(k, point.pos[1], point.pos[2])
+        --love.graphics.print(k, point.pos[1], point.pos[2])
     end
 
     -- print region names
